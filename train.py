@@ -16,6 +16,10 @@ def main():
         '--save_dir',
         default='checkpoint.pth',
         help='The directory for saving checkpoints.')
+    argparser.add_argument(
+        '--arch',
+        default='densenet121',
+        help='The model name.')
     args = argparser.parse_args()
     checkpoint_file = args.save_dir
     # Load training data
