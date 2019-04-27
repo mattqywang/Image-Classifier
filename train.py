@@ -20,6 +20,10 @@ def main():
         '--arch',
         default='densenet121',
         help='The model name.')
+    argparser.add_argument(
+        '--hidden_units',
+        type=int,
+        help='The number of hidden units.')
     args = argparser.parse_args()
     checkpoint_file = args.save_dir
     # Load training data
