@@ -24,6 +24,11 @@ def main():
         '--hidden_units',
         type=int,
         help='The number of hidden units.')
+    argparser.add_argument(
+        '--epochs',
+        type=int,
+        default=15,
+        help='The number of traning epochs.')
     args = argparser.parse_args()
     checkpoint_file = args.save_dir
     # Load training data
