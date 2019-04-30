@@ -29,6 +29,11 @@ def main():
         type=int,
         default=15,
         help='The number of traning epochs.')
+    argparser.add_argument(
+        '--learning_rate',
+        type=float,
+        default=0.003,
+        help='The learning rate.')
     args = argparser.parse_args()
     checkpoint_file = args.save_dir
     # Load training data
