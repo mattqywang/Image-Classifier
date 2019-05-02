@@ -34,6 +34,10 @@ def main():
         type=float,
         default=0.003,
         help='The learning rate.')
+    argparser.add_argument(
+        '--gpu',
+        action='store_true',
+        help='Enable gpu')
     args = argparser.parse_args()
     checkpoint_file = args.save_dir
     # Load training data

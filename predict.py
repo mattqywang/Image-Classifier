@@ -25,6 +25,10 @@ def main():
         '--category_names',
         default='cat_to_name.json',
         help='mapping of categories to real names.')
+    argparser.add_argument(
+        '--gpu',
+        action='store_true',
+        help='Enable gpu')
     args = argparser.parse_args()
     checkpoint_file = args.checkpoint
     image_path = args.data_directory
