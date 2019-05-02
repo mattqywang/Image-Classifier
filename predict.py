@@ -34,6 +34,8 @@ def main():
     image_path = args.data_directory
     topk = args.top_k
     category_names = args.category_names
+    gpu_enabled = args.gpu
+    category_names = args.category_names
     with open(category_names, 'r') as f:
         cat_to_name = json.load(f)
     model = models.densenet121(pretrained=True)

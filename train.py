@@ -40,6 +40,12 @@ def main():
         help='Enable gpu')
     args = argparser.parse_args()
     checkpoint_file = args.save_dir
+    data_dir = args.data_directory
+    model_name = args.arch
+    hidden_units = args.hidden_units
+    epochs = args.epochs
+    learning_rate = args.learning_rate
+    gpu_enabled = args.gpu
     # Load training data
     data_dir = args.data_directory
     train_dir = data_dir + '/train'
