@@ -1,10 +1,12 @@
 import argparse
 import torch
 from torch import nn
+from torch import optim
 import torch.nn.functional as F
 from torchvision import models
 from PIL import Image
 import numpy as np
+from train import create_model
 import json
 
 def main():
@@ -35,39 +37,30 @@ def main():
     topk = args.top_k
     category_names = args.category_names
     gpu_enabled = args.gpu
-    category_names = args.category_names
     with open(category_names, 'r') as f:
         cat_to_name = json.load(f)
-    model = models.densenet121(pretrained=True)
-    for param in model.parameters():
-        param.requires_grad = False
-
-    class Classifier(nn.Module):
-        def __init__(self):
-            super().__init__()
-            self.fc1 = nn.Linear(1024, 512)
-            self.fc2 = nn.Linear(512, 256)
-            self.fc3 = nn.Linear(256, 128)
-            self.fc4 = nn.Linear(128, 102)
-            self.dropout = nn.Dropout(p=0.1)
-
-        def forward(self, x):
-            x = self.dropout(F.relu(self.fc1(x)))
-            x = self.dropout(F.relu(self.fc2(x)))
-            x = self.dropout(F.relu(self.fc3(x)))
-            x = F.log_softmax(self.fc4(x), dim=1)
-            return x
-    
-    model.classifier = Classifier()
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device);
-
     checkpoint = torch.load(checkpoint_file)
-    model.classifier.load_state_dict(checkpoint['model_classifier_state_dict'])
+    device = 'cpu'
+    if gpu_enabled:
+        if torch.cuda.is_available():
+            device = 'cuda'
+        else:
+            print("gpu is not available")
+    if checkpoint['device'] != device:
+        print("Error! The trained state dict was working in {} environment, but the current environment is {}.".format(checkpoint['device'],device))
+    model, classifier_name, hidden_layers = create_model(checkpoint['model_name'], hidden_layers = checkpoint['hidden_layers'])
+    model.to(device);
+    learning_rate = checkpoint['learning_rate']
+    model_classifier_state_dict = checkpoint['model_classifier_state_dict']
+    if classifier_name == 'classifier':
+        model.classifier.load_state_dict(model_classifier_state_dict)
+        optimizer = optim.Adam(model.classifier.parameters(), lr=learning_rate)
+    elif classifier_name == 'fc':
+        model.fc.load_state_dict(model_classifier_state_dict)
+        optimizer = optim.Adam(model.fc.parameters(), lr=learning_rate)
+        #optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     model.class_to_idx = checkpoint['class_to_idx']
-    #optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     probs, classes = predict(image_path, model, topk, device)
-    
     for i in range(topk):
         print("flower name: {}, probability: {:.2f}%.".format(cat_to_name[classes[i]], probs[i]*100))
     
