@@ -3,6 +3,8 @@ import torch
 from torch import nn
 from torch import optim
 import torch.nn.functional as F
+from torch.nn.modules.linear import Linear
+from torch.nn.modules.container import Sequential
 from torchvision import datasets, transforms, models
 from workspace_utils import keep_awake, active_session
 
@@ -46,8 +48,8 @@ def main():
     epochs = args.epochs
     learning_rate = args.learning_rate
     gpu_enabled = args.gpu
+    
     # Load training data
-    data_dir = args.data_directory
     train_dir = data_dir + '/train'
     valid_dir = data_dir + '/valid'
     test_dir = data_dir + '/test'
@@ -77,36 +79,20 @@ def main():
     testloader = torch.utils.data.DataLoader(test_data, batch_size=64)
 
     # Biuld training model
-    model = models.densenet121(pretrained=True)
-    for param in model.parameters():
-        param.requires_grad = False
-
-    class Classifier(nn.Module):
-        def __init__(self):
-            super().__init__()
-            self.fc1 = nn.Linear(1024, 512)
-            self.fc2 = nn.Linear(512, 256)
-            self.fc3 = nn.Linear(256, 128)
-            self.fc4 = nn.Linear(128, 102)
-
-            self.dropout = nn.Dropout(p=0.1)
-
-        def forward(self, x):
-
-            x = self.dropout(F.relu(self.fc1(x)))
-            x = self.dropout(F.relu(self.fc2(x)))
-            x = self.dropout(F.relu(self.fc3(x)))
-            x = F.log_softmax(self.fc4(x), dim=1)
-            return x
-    
-    model.classifier = Classifier()
+    model, classifier_name, hidden_layers = create_model(model_name, hidden_units)
     criterion = nn.NLLLoss()
-    optimizer = optim.Adam(model.classifier.parameters(), lr=0.003)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if classifier_name == 'classifier':
+        optimizer = optim.Adam(model.classifier.parameters(), lr=learning_rate)
+    elif classifier_name == 'fc':
+        optimizer = optim.Adam(model.fc.parameters(), lr=learning_rate)
+    device = 'cpu'
+    if gpu_enabled:
+        if torch.cuda.is_available():
+            device = 'cuda'
+        else:
+            print("gpu is not available")
     model.to(device);
-
     # Start training
-    epochs = 15
     #train_losses, valid_losses = [], []
     for e in keep_awake(range(epochs)):
         running_loss = 0
@@ -170,11 +156,88 @@ def main():
             "Test Accuracy: {:.3f}".format(accuracy/len(testloader)))
 
     # Save the check point
+    model_classifier_state_dict = None
+    if classifier_name == 'classifier':
+        model_classifier_state_dict = model.classifier.state_dict()
+    elif classifier_name == 'fc':
+        model_classifier_state_dict = model.fc.state_dict()
     checkpoint = {'class_to_idx': train_data.class_to_idx,
               'optimizer_state_dict': optimizer.state_dict,
-              'model_classifier_state_dict': model.classifier.state_dict()}
+              'learning_rate' : learning_rate,
+              'device' : device,
+              'model_name' : model_name,
+              'hidden_layers' : hidden_layers,
+              'model_classifier_state_dict': model_classifier_state_dict}
     torch.save(checkpoint, checkpoint_file)
 
-if __name__ == '__main__':
+def create_model(model_name, hidden_units = None, hidden_layers = None):
+    model = None
+    if model_name == 'vgg13':
+        model = models.vgg13(pretrained=True)
+    elif model_name == 'vgg16':
+        model = models.vgg16(pretrained=True)
+    elif model_name == 'resnet18':
+        model = models.resnet18(pretrained=True)
+    elif model_name == 'alexnet':
+        model = models.alexnet(pretrained=True)
+    elif model_name == 'densenet161':
+        model = models.densenet161(pretrained=True)
+    elif model_name == 'inception_v3':
+        model = models.inception_v3(pretrained=True)
+    else:
+        if model_name != 'densenet121':
+            print("Sorry, the model {} is not available in this version, we will use densenet121 instead.".format(model_name))
+            print("Please refer to the supported model list: vgg13, vgg16, resnet18, alexnet, densenet161, inception_v3")
+        model = models.densenet121(pretrained=True)
 
+    for param in model.parameters():
+        param.requires_grad = False
+
+    models_dict = model._modules
+    classifier_name = None
+    in_features = None
+    out_features = 102
+    for k in models_dict.keys():
+        if k == 'fc' or k == 'classifier':
+            classifier_name = k
+            break
+    linears = models_dict[classifier_name]
+    if type(linears) is Linear:
+        in_features = linears.in_features
+    elif type(linears) is Sequential:
+        for linear in linears._modules.values():
+            if type(linear) is Linear:
+                in_features = linear.in_features
+                break
+    if hidden_units is not None:
+        hidden_layers = [in_features, hidden_units, out_features]
+    elif hidden_layers is None:
+        hidden_layers = [in_features, 512, 256, 128, out_features]
+        if in_features > 1024:
+            hidden_layers.insert(1,1024)
+
+    class Classifier(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.hidden_layers = nn.ModuleList()
+            for i in range(len(hidden_layers) - 2):
+                self.hidden_layers.append(nn.Linear(hidden_layers[i], hidden_layers[i+1]))
+
+            self.out = nn.Linear(hidden_layers[-2], hidden_layers[-1])
+
+            self.dropout = nn.Dropout(p=0.1)
+
+        def forward(self, x):
+            for fc in self.hidden_layers:
+                x = self.dropout(F.relu(fc(x)))
+
+            x = F.log_softmax(self.out(x), dim=1)
+            return x
+    if classifier_name == 'classifier':
+        model.classifier = Classifier()
+    elif classifier_name == 'fc':
+        model.fc = Classifier()
+    return model, classifier_name, hidden_layers
+
+if __name__ == '__main__':
     main()
